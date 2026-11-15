@@ -7,7 +7,9 @@ const KINDS = ["Grant", "Accelerator", "Fellowship", "Competition", "Equity / VC
 const WINDOWS = ["open", "upcoming", "closed"];
 const FITS = ["strong", "possible", "weak"];
 const VERDICTS = ["reachable", "next_cycle", "not_worth_it"];
-const FALLBACK_NOTE = "Instant processing didn't finish, so this waits for the next scan.";
+// Bounds the cost of one link: no single page can add more than this many tokens.
+const PAGE_TOKEN_CAP = 12000;
+const FALLBACK_NOTE ="Instant processing didn't finish, so this waits for the next scan.";
 
 type Doc = Record<string, unknown>;
 
@@ -118,7 +120,7 @@ async function askClaude(userText: string): Promise<Doc> {
   const client = new Anthropic({ timeout: 300_000, maxRetries: 0 });
   const tools = [
     { type: "web_search_20260209", name: "web_search", max_uses: 6 },
-    { type: "web_fetch_20260209", name: "web_fetch", max_uses: 6 },
+    { type: "web_fetch_20260209", name: "web_fetch", max_uses: 6, max_content_tokens: PAGE_TOKEN_CAP },
     RECORD_TOOL,
   ];
   // deno-lint-ignore no-explicit-any
