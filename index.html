@@ -1,0 +1,456 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="robots" content="noindex,nofollow">
+<title>Funding Radar</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;600;700&display=swap">
+<style>
+/* Layout: sticky bar with four views; pipeline = deadline runway to scale, then rows led by a days-left block. */
+:root{
+  --bg:#F2F4F8;--surface:#FFFFFF;--sunk:#E8ECF3;--ink:#131C33;--ink2:#55607A;--line:#D6DCE8;
+  --accent:#2443D0;--accent-ink:#FFFFFF;--accent-soft:#E3E8FB;
+  --hot:#B93020;--hot-soft:#FBE6E2;--warm:#8F5400;--warm-soft:#FBEFD6;--ok:#17734A;--ok-soft:#DDF2E7;
+  --display:"Space Grotesk","Inter",system-ui,sans-serif;--body:"Inter",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --r:10px;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#0E1322;--surface:#161D31;--sunk:#1E2640;--ink:#E9EDF7;--ink2:#9AA6C2;--line:#2B3552;
+  --accent:#8FA4FF;--accent-ink:#0E1322;--accent-soft:#1F2A55;
+  --hot:#FF8A75;--hot-soft:#3A1C19;--warm:#F2B755;--warm-soft:#38290F;--ok:#6FD3A3;--ok-soft:#12301F;color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0E1322;--surface:#161D31;--sunk:#1E2640;--ink:#E9EDF7;--ink2:#9AA6C2;--line:#2B3552;
+  --accent:#8FA4FF;--accent-ink:#0E1322;--accent-soft:#1F2A55;
+  --hot:#FF8A75;--hot-soft:#3A1C19;--warm:#F2B755;--warm-soft:#38290F;--ok:#6FD3A3;--ok-soft:#12301F;color-scheme:dark}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+body{margin:0}
+body{background:var(--bg);color:var(--ink);font:400 15px/1.5 var(--body);font-variant-numeric:tabular-nums}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:10;background:var(--surface)}
+.wrap{max-width:1040px;margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+button,input,select,textarea{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+a{color:var(--accent)}
+
+.bar{position:sticky;top:env(safe-area-inset-top,0px);z-index:9;background:var(--surface);border-bottom:1px solid var(--line)}
+.bar .wrap{display:flex;flex-wrap:wrap;align-items:center;gap:8px 24px;padding-block:12px}
+.brand{font:700 20px/1 var(--display);letter-spacing:-.01em;display:flex;align-items:center;gap:10px}
+.sweep{width:22px;height:22px;border-radius:50%;border:2px solid var(--accent);position:relative;flex:none}
+.sweep::after{content:"";position:absolute;left:50%;top:50%;width:8px;height:2px;background:var(--accent);transform-origin:left center;transform:rotate(-40deg)}
+.tabs{display:flex;gap:4px;flex-wrap:wrap}
+.tab{border:0;background:none;padding:7px 12px;border-radius:999px;font-weight:500;color:var(--ink2);cursor:pointer;text-decoration:none;display:inline-flex;gap:6px;align-items:center}
+.tab:hover{background:var(--sunk);color:var(--ink)}
+.tab[aria-current="page"]{background:var(--ink);color:var(--bg)}
+.badge{min-width:20px;padding:0 6px;border-radius:999px;background:var(--hot);color:var(--surface);font-size:12px;font-weight:600;text-align:center;line-height:20px}
+
+main.wrap{padding-block:24px 64px;display:flex;flex-direction:column;gap:24px}
+h1{font:600 26px/1.15 var(--display);margin:0;text-wrap:balance;letter-spacing:-.01em}
+h2{font:600 17px/1.2 var(--display);margin:0}
+.lede{color:var(--ink2);margin:6px 0 0;max-width:65ch}
+.facts{display:flex;flex-wrap:wrap;gap:6px 20px;margin-top:12px;color:var(--ink2)}
+.facts b{color:var(--ink);font-weight:600}
+.note{padding:12px 14px;border-radius:var(--r);background:var(--warm-soft);color:var(--ink);border:1px solid var(--line)}
+.note.need{background:var(--hot-soft)}
+.note a{font-weight:600}
+
+/* runway */
+.runway{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:16px}
+.runway-head{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:baseline;margin-bottom:10px}
+.legend{display:flex;gap:14px;flex-wrap:wrap;color:var(--ink2);font-size:13px}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:5px;vertical-align:-1px}
+.track{position:relative;height:84px;border-bottom:1px solid var(--line);margin:0 8px}
+.tick{position:absolute;top:0;bottom:-18px;border-left:1px dashed var(--line)}
+.tick span{position:absolute;bottom:0;left:4px;font-size:11.5px;color:var(--ink2);white-space:nowrap}
+.dot{position:absolute;width:16px;height:16px;margin-left:-8px;border-radius:50%;border:2px solid var(--c);background:var(--c);cursor:pointer;padding:0}
+.dot.est{background:var(--surface)}
+.dot:hover{transform:scale(1.25)}
+.c-hot{--c:var(--hot)}.c-warm{--c:var(--warm)}.c-calm{--c:var(--accent)}
+.track-pad{height:22px}
+.runway-empty{color:var(--ink2);font-size:14px;margin:0}
+
+/* toolbar */
+.tools{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.tools input[type=search]{flex:1 1 200px;min-width:0}
+input[type=search],input[type=text],input[type=url],input[type=date],input[type=email],input[type=password],select,textarea{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:8px 10px;min-width:0;max-width:100%}
+textarea{width:100%;min-height:72px;resize:vertical;line-height:1.45}
+.btn{border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:8px 14px;font-weight:500;cursor:pointer}
+.btn:hover{border-color:var(--ink2)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.btn.quiet{border-color:transparent;background:none;color:var(--ink2);padding-inline:8px}
+.btn[disabled]{opacity:.5;cursor:default}
+
+/* opportunity rows */
+.list{display:flex;flex-direction:column;gap:8px}
+.opp{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);overflow:hidden}
+.opp-head{display:grid;grid-template-columns:76px minmax(0,1fr) auto;gap:14px;align-items:center;width:100%;border:0;background:none;text-align:left;padding:12px 14px;cursor:pointer}
+.opp-head:hover{background:var(--sunk)}
+.count{display:flex;flex-direction:column;align-items:center;justify-content:center;height:52px;border-radius:8px;background:var(--cs);color:var(--c);line-height:1.05}
+.count b{font:700 22px/1 var(--display)}
+.count small{font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase}
+.count.word b{font-size:14px}
+.u-hot{--c:var(--hot);--cs:var(--hot-soft)}.u-warm{--c:var(--warm);--cs:var(--warm-soft)}
+.u-calm{--c:var(--accent);--cs:var(--accent-soft)}.u-off{--c:var(--ink2);--cs:var(--sunk)}
+.name{font:600 16px/1.25 var(--display);display:block;overflow-wrap:anywhere}
+.sub{display:block;color:var(--ink2);font-size:13.5px;overflow-wrap:anywhere}
+.chips{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end;max-width:300px}
+.chip{font-size:12px;font-weight:600;padding:3px 9px;border-radius:999px;background:var(--sunk);color:var(--ink2);white-space:nowrap}
+.chip.proj{background:var(--accent-soft);color:var(--accent)}
+.chip.strong{background:var(--ok-soft);color:var(--ok)}
+.chip.weak{background:var(--hot-soft);color:var(--hot)}
+.opp-body{border-top:1px solid var(--line);padding:16px;display:grid;grid-template-columns:minmax(0,1.4fr) minmax(0,1fr);gap:20px}
+.kv{display:grid;grid-template-columns:110px minmax(0,1fr);gap:6px 12px;margin:0}
+.kv dt{color:var(--ink2);font-size:13px;padding-top:1px}
+.kv dd{margin:0;overflow-wrap:anywhere}
+.kv ul{margin:0;padding-left:18px}
+.side{display:flex;flex-direction:column;gap:10px}
+.side label,.form label{display:flex;flex-direction:column;gap:4px;font-size:13px;color:var(--ink2);font-weight:500}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.links{display:flex;gap:14px;flex-wrap:wrap;margin-top:12px}
+
+.form{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:16px;display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px}
+.form .full{grid-column:1/-1}
+
+.cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:16px;display:flex;flex-direction:column;gap:10px;min-width:0}
+.card p{margin:0;overflow-wrap:anywhere}
+.meta{color:var(--ink2);font-size:13px}
+.q{font:600 16px/1.35 var(--display)}
+.empty{background:var(--surface);border:1px dashed var(--line);border-radius:var(--r);padding:28px 20px;text-align:center;color:var(--ink2)}
+.empty b{display:block;color:var(--ink);font:600 16px/1.3 var(--display);margin-bottom:4px}
+.src{display:flex;justify-content:space-between;gap:10px;align-items:center;padding:8px 0;border-bottom:1px solid var(--line);overflow-wrap:anywhere}
+.src:last-child{border-bottom:0}
+.run{padding:12px 0;border-bottom:1px solid var(--line)}
+.run:last-child{border-bottom:0}
+.toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:999px;font-weight:500;z-index:20;max-width:calc(100% - 32px)}
+@media (max-width:640px){
+  .opp-head{grid-template-columns:64px minmax(0,1fr)}
+  .chips{grid-column:1/-1;justify-content:flex-start;max-width:none}
+  .opp-body{grid-template-columns:minmax(0,1fr)}
+  h1{font-size:22px}
+}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+
+<header class="bar"><div class="wrap">
+  <div class="brand"><span class="sweep" aria-hidden="true"></span>Funding Radar</div>
+  <nav class="tabs" aria-label="Views">
+    <a class="tab" href="#pipeline" data-tab="pipeline">Pipeline</a>
+    <a class="tab" href="#needs-you" data-tab="needs-you">Needs you <span class="badge" id="needBadge" hidden></span></a>
+    <a class="tab" href="#projects" data-tab="projects">Projects</a>
+    <a class="tab" href="#agent" data-tab="agent">Agent</a>
+  </nav>
+  <button class="btn quiet" id="signOut" data-act="signOut" hidden style="margin-left:auto">Sign out</button>
+</div></header>
+
+<main class="wrap">
+  <div id="status" class="note" hidden></div>
+  <div id="view"></div>
+</main>
+<div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<script>
+(function(){
+"use strict";
+var S={opps:[],projects:[],requests:[],runs:[],config:null,user:null,authChecked:false,loaded:false};
+var UI={view:"pipeline",q:"",project:"all",win:"active",sort:"deadline",open:{},adding:false,deferred:false};
+var STAGES=[["new","New"],["shortlisted","Shortlisted"],["drafting","Drafting"],["draft_ready","Draft ready"],["submitted","Submitted"],["won","Won"],["not_selected","Not selected"],["skipped","Skipped"]];
+var KINDS=["Grant","Accelerator","Fellowship","Competition","Equity / VC","Incubator","Other"];
+var MON=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+var $=function(id){return document.getElementById(id)};
+
+function esc(v){return String(v==null?"":v).replace(/[&<>"']/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]})}
+function url(v){v=String(v||"").trim();return /^https?:\/\//i.test(v)?v:""}
+function link(v,label){var u=url(v);return u?'<a href="'+esc(u)+'" target="_blank" rel="noopener">'+esc(label)+"</a>":""}
+function parseDay(s){var m=/^(\d{4})-(\d{2})-(\d{2})/.exec(String(s||""));return m?new Date(+m[1],+m[2]-1,+m[3]):null}
+function today(){var d=new Date();return new Date(d.getFullYear(),d.getMonth(),d.getDate())}
+function daysTo(s){var d=parseDay(s);return d?Math.round((d-today())/864e5):null}
+function fmtDay(s){var d=parseDay(s);return d?d.getDate()+" "+MON[d.getMonth()]+" "+d.getFullYear():""}
+function fmtWhen(s){var d=new Date(s);if(isNaN(d))return "";return d.getDate()+" "+MON[d.getMonth()]+", "+String(d.getHours()).padStart(2,"0")+":"+String(d.getMinutes()).padStart(2,"0")}
+function stageLabel(k){for(var i=0;i<STAGES.length;i++)if(STAGES[i][0]===k)return STAGES[i][1];return "New"}
+function projName(id){for(var i=0;i<S.projects.length;i++)if(S.projects[i].id===id)return S.projects[i].name||id;return id||""}
+function isClosed(o){var d=daysTo(o.deadline);return o.window==="closed"||(d!==null&&d<0&&!o.estimated)}
+function isLive(o){return !isClosed(o)&&o.stage!=="skipped"&&o.stage!=="not_selected"}
+function toast(msg){var t=$("toast");t.textContent=msg;t.hidden=false;clearTimeout(toast.t);toast.t=setTimeout(function(){t.hidden=true},3200)}
+
+/* ---------- data: Supabase, one locked table ---------- */
+var SB_URL="https://gxcelhnyjbbgmwtknbhh.supabase.co",SB_KEY="sb_publishable_j3ItkycduLNLH6lFZnWFjQ_rWztX5Jf";
+var sb=window.supabase?window.supabase.createClient(SB_URL,SB_KEY):null;
+var chain={};
+function split(path){var i=path.indexOf("/");return [path.slice(0,i),path.slice(i+1)]}
+function queue(path,run){chain[path]=(chain[path]||Promise.resolve()).then(run,run);return chain[path]}
+function finish(p,okMsg){return Promise.resolve(p).then(function(r){if(r.error)throw r.error;return reload().then(function(){if(okMsg)toast(okMsg);return true})})
+  .catch(function(){toast("Couldn't save. Check your connection and try again.");return false})}
+function patch(path,data,okMsg){
+  if(!sb||!S.user){toast("Sign in to make changes.");return Promise.resolve(false)}
+  data.updatedAt=new Date().toISOString();var s=split(path);
+  return queue(path,function(){return finish(sb.rpc("fr_patch",{p_collection:s[0],p_id:s[1],p_patch:data}),okMsg)});
+}
+function setDoc(path,data,okMsg){
+  if(!sb||!S.user){toast("Sign in to make changes.");return Promise.resolve(false)}
+  var now=new Date().toISOString(),s=split(path);data.updatedAt=now;
+  return queue(path,function(){return finish(sb.from("fr_docs").upsert({collection:s[0],id:s[1],data:data,updated_at:now},{onConflict:"collection,id"}),okMsg)});
+}
+function reload(){
+  if(!sb||!S.user)return Promise.resolve();
+  return sb.from("fr_docs").select("collection,id,data").limit(5000).then(function(r){
+    if(r.error){status("Your data can't be reached right now. It will retry shortly.");return}
+    var by={opportunities:[],projects:[],requests:[],runs:[]},cfg=null;
+    r.data.forEach(function(d){if(d.collection==="config"){if(d.id==="agent")cfg=d.data;return}
+      if(by[d.collection]){var o=Object.assign({},d.data);o.id=d.id;by[d.collection].push(o)}});
+    S.opps=by.opportunities;S.config=cfg;
+    S.projects=by.projects.sort(function(a,b){return String(a.name).localeCompare(String(b.name))});
+    S.requests=by.requests.sort(function(a,b){return String(b.askedAt||"").localeCompare(String(a.askedAt||""))});
+    S.runs=by.runs.sort(function(a,b){return String(b.at||"").localeCompare(String(a.at||""))}).slice(0,20);
+    S.loaded=true;status(r.data.length?"":"You're signed in, but no Funding Radar data is visible to this account.");render();
+  },function(){status("Your data can't be reached right now. It will retry shortly.")});
+}
+
+/* ---------- pipeline ---------- */
+function urgency(o){
+  if(isClosed(o))return "off";
+  var d=daysTo(o.deadline);if(d===null)return o.window==="open"?"calm":"off";
+  if(o.estimated)return d<=30?"warm":"calm";
+  return d<=7?"hot":d<=30?"warm":"calm";
+}
+function countBlock(o){
+  var u=urgency(o),d=daysTo(o.deadline),inner;
+  if(isClosed(o))inner="<b>Closed</b>",u+=" word";
+  else if(d===null)inner="<b>"+esc(o.deadlineLabel||(o.window==="open"?"Rolling":"TBA"))+"</b>",u+=" word";
+  else if(o.estimated){var p=parseDay(o.deadline);inner="<b>~"+MON[p.getMonth()]+"</b><small>"+p.getFullYear()+"</small>";u+=" word"}
+  else inner="<b>"+d+"</b><small>"+(d===1?"day":"days")+"</small>";
+  return '<span class="count u-'+u+'">'+inner+"</span>";
+}
+function deadlineLine(o){
+  if(o.deadline&&o.estimated)return "Around "+esc(fmtDay(o.deadline))+" (estimate"+(o.deadlineBasis?": "+esc(o.deadlineBasis):"")+")";
+  if(o.deadline)return esc(fmtDay(o.deadline))+(o.verifiedAt?" · confirmed on the official page "+esc(fmtDay(o.verifiedAt)):" · not yet confirmed on the official page");
+  return esc(o.deadlineLabel||"No date published");
+}
+function sortKey(o){var d=daysTo(o.deadline);return isClosed(o)?9e6:d===null?(o.window==="open"?8e5:8e6):d}
+function fitRank(o){return o.fit==="strong"?0:o.fit==="possible"?1:o.fit==="weak"?2:3}
+function filtered(){
+  var q=UI.q.trim().toLowerCase();
+  return S.opps.filter(function(o){
+    if(UI.project!=="all"&&o.project!==UI.project)return false;
+    if(UI.win==="active"&&!isLive(o))return false;
+    if(UI.win==="open"&&(o.window!=="open"||!isLive(o)))return false;
+    if(UI.win==="drafts"&&o.stage!=="draft_ready"&&o.stage!=="drafting")return false;
+    if(UI.win==="submitted"&&o.stage!=="submitted"&&o.stage!=="won")return false;
+    if(q&&[o.name,o.funder,o.region,o.amount,o.kind,projName(o.project)].join(" ").toLowerCase().indexOf(q)<0)return false;
+    return true;
+  }).sort(function(a,b){
+    if(UI.sort==="fit"){var f=fitRank(a)-fitRank(b);if(f)return f}
+    return sortKey(a)-sortKey(b)||String(a.name).localeCompare(String(b.name));
+  });
+}
+function runway(){
+  var span=180,t=today(),items=S.opps.filter(function(o){var d=daysTo(o.deadline);return isLive(o)&&d!==null&&d>=0&&d<=span})
+    .sort(function(a,b){return daysTo(a.deadline)-daysTo(b.deadline)});
+  var h='<section class="runway" aria-label="Deadline runway"><div class="runway-head"><h2>Next 180 days</h2><div class="legend">'+
+    '<span><i style="background:var(--hot)"></i>7 days or less</span><span><i style="background:var(--warm)"></i>30 days or less</span>'+
+    '<span><i style="background:var(--accent)"></i>Later</span><span><i style="border:2px solid var(--ink2)"></i>Estimated date</span></div></div>';
+  if(!items.length)return h+'<p class="runway-empty">No dated deadlines in the next six months yet.</p></section>';
+  h+='<div class="track">';
+  var m=new Date(t.getFullYear(),t.getMonth()+1,1);
+  h+='<div class="tick" style="left:0"><span>Today</span></div>';
+  while((m-t)/864e5<=span){var x=(m-t)/864e5/span*100;if(x>6)h+='<div class="tick" style="left:'+x.toFixed(2)+'%"><span>'+MON[m.getMonth()]+"</span></div>";m=new Date(m.getFullYear(),m.getMonth()+1,1)}
+  var lanes=[-99,-99,-99,-99];
+  items.forEach(function(o){
+    var d=daysTo(o.deadline),x=d/span*100,l=0;while(l<3&&x-lanes[l]<2.4)l++;lanes[l]=x;
+    var u=urgency(o),label=o.name+" · "+(o.estimated?"around ":"")+fmtDay(o.deadline)+" · "+projName(o.project);
+    h+='<button class="dot c-'+u+(o.estimated?" est":"")+'" style="left:'+x.toFixed(2)+"%;top:"+(6+l*19)+'px" data-act="jump" data-id="'+esc(o.id)+'" title="'+esc(label)+'" aria-label="'+esc(label)+'"></button>';
+  });
+  return h+'</div><div class="track-pad"></div></section>';
+}
+function oppRow(o){
+  var open=!!UI.open[o.id],sub=[o.funder,o.amount,o.region].filter(Boolean).map(esc).join(" · ");
+  var chips=(o.project?'<span class="chip proj">'+esc(projName(o.project))+"</span>":"")+
+    (o.fit?'<span class="chip '+esc(o.fit)+'">'+(o.fit==="strong"?"Strong fit":o.fit==="weak"?"Weak fit":"Possible fit")+"</span>":"")+
+    '<span class="chip">'+esc(stageLabel(o.stage))+"</span>";
+  var h='<article class="opp" id="o-'+esc(o.id)+'"><button class="opp-head" data-act="toggle" data-id="'+esc(o.id)+'" aria-expanded="'+open+'">'+
+    countBlock(o)+'<span><span class="name">'+esc(o.name)+'</span><span class="sub">'+sub+'</span></span><span class="chips">'+chips+"</span></button>";
+  if(!open)return h+"</article>";
+  var bl=(o.blockers||[]).map(function(b){return "<li>"+esc(b)+"</li>"}).join("");
+  var links=[link(o.url,"Official page"),link(o.draftUrl,"Open draft application"),link(o.sourceUrl,"Where it was found")].filter(Boolean).join("");
+  h+='<div class="opp-body"><div><dl class="kv">'+
+    "<dt>Deadline</dt><dd>"+deadlineLine(o)+"</dd>"+
+    (o.kind?"<dt>Type</dt><dd>"+esc(o.kind)+(o.equityFree?" · equity-free":"")+"</dd>":"")+
+    (o.summary?"<dt>What it is</dt><dd>"+esc(o.summary)+"</dd>":"")+
+    (o.fitWhy?"<dt>Why this project</dt><dd>"+esc(o.fitWhy)+"</dd>":"")+
+    (bl?"<dt>Before applying</dt><dd><ul>"+bl+"</ul></dd>":"")+
+    (o.foundAt?"<dt>Found</dt><dd>"+esc(fmtDay(o.foundAt))+(o.source?" · "+esc(o.source):"")+"</dd>":"")+
+    "</dl>"+(links?'<div class="links">'+links+"</div>":"")+"</div>"+
+    '<div class="side"><label>Where you are<select data-change="stage" data-id="'+esc(o.id)+'" id="st-'+esc(o.id)+'">'+
+    STAGES.map(function(s){return '<option value="'+s[0]+'"'+((o.stage||"new")===s[0]?" selected":"")+">"+s[1]+"</option>"}).join("")+"</select></label>"+
+    '<label>Apply with<select data-change="project" data-id="'+esc(o.id)+'" id="pj-'+esc(o.id)+'"><option value="">Not decided</option>'+
+    S.projects.map(function(p){return '<option value="'+esc(p.id)+'"'+(o.project===p.id?" selected":"")+">"+esc(p.name)+"</option>"}).join("")+"</select></label>"+
+    '<label>Your notes<textarea id="nt-'+esc(o.id)+'" placeholder="Anything the agent should know about this one">'+esc(o.notes)+"</textarea></label>"+
+    '<div class="row"><button class="btn primary" data-act="saveNotes" data-id="'+esc(o.id)+'">Save notes</button>'+
+    (o.stage==="skipped"?"":'<button class="btn quiet" data-act="skip" data-id="'+esc(o.id)+'">Not for me</button>')+"</div></div></div>";
+  return h+"</article>";
+}
+function addForm(){
+  return '<form class="form" id="addForm"><label class="full">Programme name<input type="text" id="a-name" required maxlength="140"></label>'+
+    '<label>Funder<input type="text" id="a-funder" maxlength="120"></label><label>Amount or prize<input type="text" id="a-amount" maxlength="80" placeholder="e.g. Up to $50K"></label>'+
+    '<label>Deadline<input type="date" id="a-deadline"></label><label>Type<select id="a-kind">'+KINDS.map(function(k){return "<option>"+k+"</option>"}).join("")+"</select></label>"+
+    '<label>Apply with<select id="a-project"><option value="">Let the agent decide</option>'+S.projects.map(function(p){return '<option value="'+esc(p.id)+'">'+esc(p.name)+"</option>"}).join("")+"</select></label>"+
+    '<label class="full">Link<input type="url" id="a-url" placeholder="https://"></label>'+
+    '<div class="row full"><button class="btn primary" type="submit">Add to pipeline</button><button class="btn quiet" type="button" data-act="addToggle">Cancel</button></div></form>';
+}
+function viewPipeline(){
+  var live=S.opps.filter(isLive),openNow=live.filter(function(o){return o.window==="open"}).length;
+  var soon=live.filter(function(o){var d=daysTo(o.deadline);return d!==null&&d<=30&&!o.estimated}).length;
+  var drafts=live.filter(function(o){return o.stage==="draft_ready"}).length;
+  var need=S.requests.filter(function(r){return r.status==="open"}).length,last=S.runs[0];
+  var h="<div><h1>Where the money is, and how long you have</h1><div class=\"facts\"><span><b>"+openNow+"</b> open now</span><span><b>"+soon+
+    "</b> due within 30 days</span><span><b>"+drafts+"</b> drafts ready</span><span>"+(last?"Last scan "+esc(fmtWhen(last.at)):"No scan has run yet")+"</span></div></div>";
+  if(need)h+='<div class="note need">The agent is waiting on <b>'+need+(need===1?" answer":" answers")+'</b> from you. <a href="#needs-you">Answer now</a></div>';
+  h+=runway();
+  h+='<div class="tools"><input type="search" id="q" placeholder="Search programmes, funders, regions" value="'+esc(UI.q)+'" aria-label="Search">'+
+    '<select id="f-project" aria-label="Project"><option value="all">All projects</option>'+S.projects.map(function(p){return '<option value="'+esc(p.id)+'"'+(UI.project===p.id?" selected":"")+">"+esc(p.name)+"</option>"}).join("")+"</select>"+
+    '<select id="f-win" aria-label="Show">'+[["active","Active"],["open","Open now"],["drafts","Drafts"],["submitted","Submitted"],["all","Everything"]].map(function(w){return '<option value="'+w[0]+'"'+(UI.win===w[0]?" selected":"")+">"+w[1]+"</option>"}).join("")+"</select>"+
+    '<select id="f-sort" aria-label="Sort"><option value="deadline"'+(UI.sort==="deadline"?" selected":"")+'>Soonest deadline</option><option value="fit"'+(UI.sort==="fit"?" selected":"")+">Best fit</option></select>"+
+    '<button class="btn" data-act="addToggle">'+(UI.adding?"Close":"Add one yourself")+"</button></div>";
+  if(UI.adding)h+=addForm();
+  var rows=filtered();
+  if(!S.opps.length)h+='<div class="empty"><b>Nothing in the pipeline yet</b>Opportunities appear here after the agent\'s first scan, or add one yourself.</div>';
+  else if(!rows.length)h+='<div class="empty"><b>No matches</b>Try a different filter or search.</div>';
+  else h+='<div class="list">'+rows.map(oppRow).join("")+"</div>";
+  return h;
+}
+
+/* ---------- needs you ---------- */
+function viewNeeds(){
+  var open=S.requests.filter(function(r){return r.status==="open"}),done=S.requests.filter(function(r){return r.status!=="open"});
+  var h="<div><h1>Questions only you can answer</h1><p class=\"lede\">When a draft is missing a fact the agent can't find in your project files, it asks here and emails you. Your answer goes into the next run.</p></div>";
+  if(!open.length)h+='<div class="empty"><b>Nothing waiting on you</b>New questions will show up here and in your inbox.</div>';
+  else h+='<div class="cards">'+open.map(function(r){
+    var o=S.opps.filter(function(x){return x.id===r.opportunityId})[0];
+    return '<div class="card"><span class="meta">'+esc(o?o.name:projName(r.project)||"General")+(r.askedAt?" · asked "+esc(fmtDay(r.askedAt)):"")+'</span><p class="q">'+esc(r.question)+"</p>"+
+      (r.why?'<p class="meta">'+esc(r.why)+"</p>":"")+'<textarea id="an-'+esc(r.id)+'" placeholder="Your answer" aria-label="Your answer"></textarea>'+
+      '<div class="row"><button class="btn primary" data-act="answer" data-id="'+esc(r.id)+'">Send answer</button></div></div>'}).join("")+"</div>";
+  if(done.length)h+="<h2>Answered</h2><div class=\"cards\">"+done.slice(0,30).map(function(r){
+    return '<div class="card"><p class="meta">'+esc(r.question)+"</p><p>"+esc(r.answer)+'</p><span class="meta">'+(r.status==="used"?"Used by the agent":"Waiting for the next run")+"</span></div>"}).join("")+"</div>";
+  return h;
+}
+
+/* ---------- projects ---------- */
+function viewProjects(){
+  var h="<div><h1>What the agent knows about each project</h1><p class=\"lede\">The agent matches opportunities against these profiles and refreshes them from your project folders on each run. Correct anything that's out of date.</p></div>";
+  if(!S.projects.length)return h+'<div class="empty"><b>No project profiles yet</b>They are added when the agent is set up.</div>';
+  return h+'<div class="cards">'+S.projects.map(function(p){
+    var n=S.opps.filter(function(o){return o.project===p.id&&isLive(o)}).length;
+    return '<div class="card"><div><h2>'+esc(p.name)+'</h2><span class="meta">'+[p.sector,p.stage,p.geography].filter(Boolean).map(esc).join(" · ")+"</span></div>"+
+      (p.summary?"<p>"+esc(p.summary)+"</p>":"")+
+      '<dl class="kv">'+(p.traction?"<dt>Traction</dt><dd>"+esc(p.traction)+"</dd>":"")+(p.legal?"<dt>Registration</dt><dd>"+esc(p.legal)+"</dd>":"")+
+      (p.agentStatus?"<dt>Latest from files</dt><dd>"+esc(p.agentStatus)+(p.statusCheckedAt?' <span class="meta">('+esc(fmtDay(p.statusCheckedAt))+")</span>":"")+"</dd>":"")+
+      (p.unknowns&&p.unknowns.length?"<dt>Still missing</dt><dd><ul>"+p.unknowns.map(function(u){return "<li>"+esc(u)+"</li>"}).join("")+"</ul></dd>":"")+"</dl>"+
+      '<label class="meta">Your update<textarea id="pu-'+esc(p.id)+'" placeholder="New traction, team changes, registration, anything a funder would ask">'+esc(p.ownerNote)+"</textarea></label>"+
+      '<div class="row"><button class="btn primary" data-act="saveProject" data-id="'+esc(p.id)+'">Save update</button><span class="meta">'+n+(n===1?" live opportunity":" live opportunities")+"</span></div></div>"}).join("")+"</div>";
+}
+
+/* ---------- agent ---------- */
+function viewAgent(){
+  var c=S.config||{},src=c.sources||[];
+  var h="<div><h1>How the search runs</h1><p class=\"lede\">"+esc(c.schedule||"The daily scan isn't scheduled yet.")+" It checks the sources below, confirms dates on each official page, drafts applications, and emails you when something needs you. It never submits an application for you.</p></div>";
+  h+='<div class="card"><h2>Sources it checks</h2><div>'+(src.length?src.map(function(s,i){return '<div class="src"><span>'+(link(s,s)||esc(s))+'</span><button class="btn quiet" data-act="rmSource" data-i="'+i+'" aria-label="Remove '+esc(s)+'">Remove</button></div>'}).join(""):'<p class="meta">No sources listed yet.</p>')+
+    '</div><form class="row" id="srcForm"><input type="text" id="s-new" placeholder="Add a site, newsletter or search phrase" style="flex:1 1 240px" maxlength="200" aria-label="New source"><button class="btn" type="submit">Add source</button></form></div>';
+  h+='<div class="card"><h2>Recent runs</h2><div>'+(S.runs.length?S.runs.map(function(r){
+    return '<div class="run"><b>'+esc(fmtWhen(r.at))+'</b> <span class="meta">'+[r.found!=null?r.found+" new":"",r.updated!=null?r.updated+" updated":"",r.emailed?"email sent":""].filter(Boolean).join(" · ")+"</span><p style=\"margin:4px 0 0\">"+esc(r.summary)+"</p></div>"}).join(""):'<p class="meta">No runs logged yet.</p>')+"</div></div>";
+  return h;
+}
+
+/* ---------- render ---------- */
+function viewLogin(){
+  if(!sb)return '<div class="empty"><b>The page could not finish loading</b>Reload to try again.</div>';
+  if(!S.authChecked)return '<div class="empty">Checking your sign-in…</div>';
+  return '<div class="card" style="max-width:440px"><div><h1>Sign in</h1><p class="lede">Funding Radar is private. Sign in with the email that owns it.</p></div>'+
+    '<form id="loginForm" class="side"><label>Email<input type="email" id="l-email" required autocomplete="username"></label>'+
+    '<label>Password<input type="password" id="l-pass" required minlength="8" autocomplete="current-password"></label>'+
+    '<div class="row"><button class="btn primary" type="submit" data-mode="in">Sign in</button><button class="btn" type="submit" data-mode="up">Create account</button></div>'+
+    '<p class="meta" id="l-msg" role="status"></p></form></div>';
+}
+function render(force){
+  var a=document.activeElement;
+  if(!force&&a&&$("view").contains(a)&&(a.tagName==="TEXTAREA"||(a.tagName==="INPUT"&&a.type!=="search"))){UI.deferred=true;return}
+  UI.deferred=false;
+  var keepQ=a&&a.id==="q",pos=keepQ?a.selectionStart:0;
+  $("view").innerHTML=!S.user?viewLogin():!S.loaded?'<div class="empty">Loading your pipeline…</div>':UI.view==="needs-you"?viewNeeds():UI.view==="projects"?viewProjects():UI.view==="agent"?viewAgent():viewPipeline();
+  if(keepQ&&$("q")){$("q").focus();try{$("q").setSelectionRange(pos,pos)}catch(e){}}
+  var need=S.requests.filter(function(r){return r.status==="open"}).length,b=$("needBadge");b.hidden=!need;b.textContent=need;
+  document.querySelectorAll(".tab").forEach(function(t){if(t.dataset.tab===UI.view)t.setAttribute("aria-current","page");else t.removeAttribute("aria-current")});
+}
+function route(){var h=location.hash.replace("#","");UI.view=["pipeline","needs-you","projects","agent"].indexOf(h)>=0?h:"pipeline";render(true)}
+function slug(s){return String(s).toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-+|-+$/g,"").slice(0,80)||"item"}
+function find(list,id){for(var i=0;i<list.length;i++)if(list[i].id===id)return list[i];return null}
+
+document.addEventListener("click",function(e){
+  var el=e.target.closest("[data-act]");if(!el)return;var id=el.dataset.id,act=el.dataset.act;
+  if(act==="signOut"){if(sb)sb.auth.signOut();return}
+  if(act==="toggle"){UI.open[id]=!UI.open[id];render(true)}
+  else if(act==="jump"){UI.open[id]=true;UI.win=UI.win==="active"||UI.win==="all"?UI.win:"active";render(true);var n=$("o-"+id);if(n)n.scrollIntoView({block:"center",behavior:"smooth"})}
+  else if(act==="addToggle"){UI.adding=!UI.adding;render(true)}
+  else if(act==="saveNotes"){patch("opportunities/"+id,{notes:$("nt-"+id).value.trim()},"Notes saved")}
+  else if(act==="skip"){patch("opportunities/"+id,{stage:"skipped"},"Marked as not for you")}
+  else if(act==="answer"){var v=$("an-"+id).value.trim();if(!v){toast("Write an answer first.");return}
+    patch("requests/"+id,{answer:v,status:"answered",answeredAt:new Date().toISOString()},"Answer sent to the agent").then(function(ok){if(ok)render(true)})}
+  else if(act==="saveProject"){patch("projects/"+id,{ownerNote:$("pu-"+id).value.trim(),ownerNoteAt:new Date().toISOString()},"Update saved")}
+  else if(act==="rmSource"){var src=((S.config||{}).sources||[]).slice();src.splice(+el.dataset.i,1);patch("config/agent",{sources:src},"Source removed")}
+});
+document.addEventListener("change",function(e){
+  var t=e.target;
+  if(t.dataset.change==="stage")patch("opportunities/"+t.dataset.id,{stage:t.value},"Status updated");
+  else if(t.dataset.change==="project")patch("opportunities/"+t.dataset.id,{project:t.value,projectSetBy:"owner"},"Project updated");
+  else if(t.id==="f-project"){UI.project=t.value;render(true)}
+  else if(t.id==="f-win"){UI.win=t.value;render(true)}
+  else if(t.id==="f-sort"){UI.sort=t.value;render(true)}
+});
+document.addEventListener("input",function(e){if(e.target.id==="q"){UI.q=e.target.value;render(true)}});
+document.addEventListener("focusout",function(){setTimeout(function(){if(UI.deferred)render()},0)});
+document.addEventListener("submit",function(e){
+  e.preventDefault();
+  if(e.target.id==="loginForm"){
+    var mode=(e.submitter&&e.submitter.dataset.mode)||"in",em=$("l-email").value.trim(),pw=$("l-pass").value,msg=$("l-msg");
+    msg.textContent="Working…";
+    var p=mode==="up"?sb.auth.signUp({email:em,password:pw,options:{emailRedirectTo:location.origin+location.pathname}}):sb.auth.signInWithPassword({email:em,password:pw});
+    p.then(function(r){var m=$("l-msg");if(!m)return;
+      if(r.error)m.textContent=r.error.message||"That didn't work. Try again.";
+      else if(mode==="up"&&!r.data.session)m.textContent="Check your inbox and click the confirmation link. Then come back to this page and sign in.";
+      else m.textContent="";},function(){var m=$("l-msg");if(m)m.textContent="Couldn't reach the server. Try again."});
+    return;
+  }
+  if(e.target.id==="addForm"){
+    var name=$("a-name").value.trim();if(!name)return;var id=slug(name),n=2;while(find(S.opps,id))id=slug(name)+"-"+(n++);
+    var now=new Date().toISOString();
+    setDoc("opportunities/"+id,{name:name,funder:$("a-funder").value.trim(),amount:$("a-amount").value.trim(),deadline:$("a-deadline").value||null,
+      estimated:false,kind:$("a-kind").value,project:$("a-project").value,url:url($("a-url").value),window:"open",stage:"shortlisted",source:"Added by you",foundAt:now},"Added to pipeline")
+      .then(function(ok){if(ok){UI.adding=false;UI.open[id]=true;render(true)}});
+  }else if(e.target.id==="srcForm"){
+    var v=$("s-new").value.trim();if(!v)return;var src=((S.config||{}).sources||[]).concat([v]);
+    setDoc("config/agent",Object.assign({},S.config||{},{sources:src}),"Source added");
+    $("s-new").value="";
+  }
+});
+window.addEventListener("hashchange",route);
+
+/* ---------- session ---------- */
+function status(msg){var s=$("status");s.hidden=!msg;s.textContent=msg||""}
+function setUser(u){
+  var was=S.user&&S.user.id;S.authChecked=true;S.user=u||null;$("signOut").hidden=!S.user;
+  if(S.user){if(was!==S.user.id){S.loaded=false;render(true);reload()}}
+  else{S.opps=[];S.projects=[];S.requests=[];S.runs=[];S.config=null;S.loaded=false;status("");render(true)}
+}
+route();
+if(sb){
+  sb.auth.getSession().then(function(r){setUser(r.data&&r.data.session&&r.data.session.user)},function(){setUser(null)});
+  sb.auth.onAuthStateChange(function(ev,session){setTimeout(function(){setUser(session&&session.user)},0)});
+  setInterval(function(){if(!document.hidden)reload()},60000);
+  document.addEventListener("visibilitychange",function(){if(!document.hidden)reload()});
+}
+})();
+</script>
+</body>
+</html>
