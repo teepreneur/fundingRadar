@@ -215,6 +215,7 @@ function reload(){
     S.projects=by.projects.sort(function(a,b){return String(a.name).localeCompare(String(b.name))});
     S.requests=by.requests.sort(function(a,b){return String(b.askedAt||"").localeCompare(String(a.askedAt||""))});
     S.runs=by.runs.sort(function(a,b){return String(b.at||"").localeCompare(String(a.at||""))}).slice(0,20);
+    watchWorking();
     S.loaded=true;status(r.data.length?"":"You're signed in, but no Funding Radar data is visible to this account.");render();
   },function(){status("Your data can't be reached right now. It will retry shortly.")});
 }
@@ -326,8 +327,29 @@ function addForm(){
     '<label class="full">Link<input type="url" id="a-url" placeholder="https://"></label>'+
     '<div class="row full"><button class="btn primary" type="submit">Add to pipeline</button><button class="btn quiet" type="button" data-act="addToggle">Cancel</button></div></form>';
 }
-var LINK_STATES={queued:["Waiting for the next scan",""],added:["Added","strong"],duplicate:["Already in your pipeline",""],rejected:["Not added","weak"],needs_info:["Needs more from you","weak"]};
+var LINK_STATES={queued:["Waiting for the next scan",""],working:["Working on it now","proj"],added:["Added","strong"],duplicate:["Already in your pipeline",""],rejected:["Not added","weak"],needs_info:["Needs more from you","weak"]};
 function firstUrl(text){var m=/https?:\/\/[^\s<>"']+/i.exec(String(text||""));return m?m[0].replace(/[).,;]+$/,""):""}
+var WAIT_MSG="Sent. The agent picks it up at its next scan.";
+function kick(id){
+  if(!sb||!S.user)return;
+  sb.functions.invoke("fr-process-link",{body:{id:id}}).then(function(r){
+    var d=r&&r.data;
+    if(!d||r.error){toast(WAIT_MSG);return}
+    if(d.started){toast("The agent is working on it now. Usually under two minutes.");reload()}
+    else toast(d.reason==="no_key"?"Sent. Instant processing isn't switched on yet, so it waits for the next scan.":WAIT_MSG);
+  },function(){toast(WAIT_MSG)});
+}
+var pollTimer=null;
+function watchWorking(){
+  var now=Date.now(),busy=false;
+  S.inbox.forEach(function(i){
+    if(i.status!=="working")return;
+    var age=now-Date.parse(i.startedAt||0);
+    if(!(age<600000)){if(!i._reset){i._reset=true;patch("inbox/"+i.id,{status:"queued",result:"Instant processing didn't finish, so this waits for the next scan."})}}
+    else busy=true;
+  });
+  clearTimeout(pollTimer);pollTimer=busy?setTimeout(reload,6000):null;
+}
 function dropBox(){
   var items=S.inbox.filter(function(i){return !i.dismissed}).slice(0,8);
   var h='<section class="drop"><form id="linkForm"><h2>Saw one on Instagram or LinkedIn? Drop the link</h2>'+
@@ -339,6 +361,7 @@ function dropBox(){
     return '<div class="src"><span><span class="chip '+st[1]+'">'+st[0]+"</span> "+(link(i.url,i.url.replace(/^https?:\/\/(www\.)?/i,"").slice(0,60))||esc(i.url))+
       (i.result?'<br><span class="meta">'+esc(i.result)+"</span>":"")+"</span><span class=\"row\">"+
       (o?'<button class="btn" data-act="jump" data-id="'+esc(o.id)+'">Open it</button>':"")+
+      (i.status==="queued"||i.status==="needs_info"?'<button class="btn" data-act="processLink" data-id="'+esc(i.id)+'">Try now</button>':"")+
       '<button class="btn quiet" data-act="dismissLink" data-id="'+esc(i.id)+'">Clear</button></span></div>'}).join("")+"</div>";
   return h+"</section>";
 }
@@ -434,6 +457,7 @@ document.addEventListener("click",function(e){
   var el=e.target.closest("[data-act]");if(!el)return;var id=el.dataset.id,act=el.dataset.act;
   if(act==="signOut"){if(sb)sb.auth.signOut();return}
   if(act==="toggle"){UI.open[id]=!UI.open[id];render(true)}
+  else if(act==="processLink"){el.disabled=true;kick(id)}
   else if(act==="dismissLink"){patch("inbox/"+id,{dismissed:true})}
   else if(act==="plan"){UI.plan[id]=!UI.plan[id];render(true)}
   else if(act==="askPlan"){patch("opportunities/"+id,{fitPlanRequested:true},"Plan requested")}
@@ -474,7 +498,8 @@ document.addEventListener("submit",function(e){
     if(!u){toast("Paste a link that starts with http.");return}
     if(S.inbox.some(function(i){return i.url===u&&!i.dismissed&&i.status==="queued"})){toast("That link is already waiting for the agent.");return}
     var note=[$("d-note").value.trim(),raw.replace(u,"").trim()].filter(Boolean).join(" ").slice(0,1500);
-    setDoc("inbox/l-"+Date.now().toString(36),{url:u,note:note,status:"queued",addedAt:new Date().toISOString()},"Sent. The agent works on it at its next scan.");
+    var linkId="l-"+Date.now().toString(36);
+    setDoc("inbox/"+linkId,{url:u,note:note,status:"queued",addedAt:new Date().toISOString()}).then(function(ok){if(ok)kick(linkId)});
     return;
   }
   if(e.target.id==="addForm"){

@@ -8,3 +8,7 @@ A private dashboard of funding opportunities (grants, accelerators, fellowships,
 - A scheduled Claude task searches for opportunities each day and writes to the same table. It drafts applications but never submits them.
 
 To give someone access, add their email to the `fr_owners` table and have them create an account on the sign-in page.
+
+## Instant link processing
+
+`supabase/functions/fr-process-link` is a Supabase Edge Function. When a link is dropped on the dashboard it checks the caller is an approved user, then asks Claude (with web search) to find the programme's official page, confirm the deadline, pick the best-fit project and record the result. It needs an `ANTHROPIC_API_KEY` secret set in the Supabase project; without it, dropped links simply wait for the daily scan.
