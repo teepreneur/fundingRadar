@@ -107,6 +107,9 @@ textarea{width:100%;min-height:72px;resize:vertical;line-height:1.45}
 .side label,.form label{display:flex;flex-direction:column;gap:4px;font-size:13px;color:var(--ink2);font-weight:500}
 .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
 .links{display:flex;gap:14px;flex-wrap:wrap;margin-top:12px}
+.drop{background:var(--accent-soft);border:1px solid var(--line);border-radius:var(--r);padding:16px;display:flex;flex-direction:column;gap:10px}
+.drop form{display:flex;flex-direction:column;gap:10px}
+.drop .src{border-color:var(--line)}
 .plan{margin-top:16px;padding-top:14px;border-top:1px dashed var(--line);display:flex;flex-direction:column;gap:10px;align-items:flex-start}
 .plan p{margin:0;overflow-wrap:anywhere}
 .plan ol{margin:0;padding-left:20px;display:flex;flex-direction:column;gap:10px}
@@ -161,7 +164,7 @@ textarea{width:100%;min-height:72px;resize:vertical;line-height:1.45}
 <script>
 (function(){
 "use strict";
-var S={opps:[],projects:[],requests:[],runs:[],config:null,user:null,authChecked:false,loaded:false};
+var S={opps:[],inbox:[],projects:[],requests:[],runs:[],config:null,user:null,authChecked:false,loaded:false};
 var UI={view:"pipeline",q:"",project:"all",win:"active",sort:"deadline",open:{},plan:{},adding:false,deferred:false};
 var STAGES=[["new","New"],["shortlisted","Shortlisted"],["drafting","Drafting"],["draft_ready","Draft ready"],["submitted","Submitted"],["won","Won"],["not_selected","Not selected"],["skipped","Skipped"]];
 var KINDS=["Grant","Accelerator","Fellowship","Competition","Equity / VC","Incubator","Other"];
@@ -204,10 +207,11 @@ function reload(){
   if(!sb||!S.user)return Promise.resolve();
   return sb.from("fr_docs").select("collection,id,data").limit(5000).then(function(r){
     if(r.error){status("Your data can't be reached right now. It will retry shortly.");return}
-    var by={opportunities:[],projects:[],requests:[],runs:[]},cfg=null;
+    var by={opportunities:[],projects:[],requests:[],runs:[],inbox:[]},cfg=null;
     r.data.forEach(function(d){if(d.collection==="config"){if(d.id==="agent")cfg=d.data;return}
       if(by[d.collection]){var o=Object.assign({},d.data);o.id=d.id;by[d.collection].push(o)}});
     S.opps=by.opportunities;S.config=cfg;
+    S.inbox=by.inbox.sort(function(a,b){return String(b.addedAt||"").localeCompare(String(a.addedAt||""))});
     S.projects=by.projects.sort(function(a,b){return String(a.name).localeCompare(String(b.name))});
     S.requests=by.requests.sort(function(a,b){return String(b.askedAt||"").localeCompare(String(a.askedAt||""))});
     S.runs=by.runs.sort(function(a,b){return String(b.at||"").localeCompare(String(a.at||""))}).slice(0,20);
@@ -322,6 +326,22 @@ function addForm(){
     '<label class="full">Link<input type="url" id="a-url" placeholder="https://"></label>'+
     '<div class="row full"><button class="btn primary" type="submit">Add to pipeline</button><button class="btn quiet" type="button" data-act="addToggle">Cancel</button></div></form>';
 }
+var LINK_STATES={queued:["Waiting for the next scan",""],added:["Added","strong"],duplicate:["Already in your pipeline",""],rejected:["Not added","weak"],needs_info:["Needs more from you","weak"]};
+function firstUrl(text){var m=/https?:\/\/[^\s<>"']+/i.exec(String(text||""));return m?m[0].replace(/[).,;]+$/,""):""}
+function dropBox(){
+  var items=S.inbox.filter(function(i){return !i.dismissed}).slice(0,8);
+  var h='<section class="drop"><form id="linkForm"><h2>Saw one on Instagram or LinkedIn? Drop the link</h2>'+
+    '<div class="row"><input type="text" id="d-url" placeholder="Paste the link here" aria-label="Link to the opportunity" style="flex:2 1 260px">'+
+    '<input type="text" id="d-note" maxlength="1500" placeholder="Optional: paste the caption, or name a project" aria-label="Caption or note" style="flex:1 1 220px">'+
+    '<button class="btn primary" type="submit">Send to the agent</button></div></form>';
+  if(items.length)h+="<div>"+items.map(function(i){
+    var st=LINK_STATES[i.status]||LINK_STATES.queued,o=i.opportunityId&&find(S.opps,i.opportunityId);
+    return '<div class="src"><span><span class="chip '+st[1]+'">'+st[0]+"</span> "+(link(i.url,i.url.replace(/^https?:\/\/(www\.)?/i,"").slice(0,60))||esc(i.url))+
+      (i.result?'<br><span class="meta">'+esc(i.result)+"</span>":"")+"</span><span class=\"row\">"+
+      (o?'<button class="btn" data-act="jump" data-id="'+esc(o.id)+'">Open it</button>':"")+
+      '<button class="btn quiet" data-act="dismissLink" data-id="'+esc(i.id)+'">Clear</button></span></div>'}).join("")+"</div>";
+  return h+"</section>";
+}
 function viewPipeline(){
   var live=S.opps.filter(isLive),openNow=live.filter(function(o){return o.window==="open"}).length;
   var soon=live.filter(function(o){var d=daysTo(o.deadline);return d!==null&&d<=30&&!o.estimated}).length;
@@ -330,6 +350,7 @@ function viewPipeline(){
   var h="<div><h1>Where the money is, and how long you have</h1><div class=\"facts\"><span><b>"+openNow+"</b> open now</span><span><b>"+soon+
     "</b> due within 30 days</span><span><b>"+drafts+"</b> drafts ready</span><span>"+(last?"Last scan "+esc(fmtWhen(last.at)):"No scan has run yet")+"</span></div></div>";
   if(need)h+='<div class="note need">The agent is waiting on <b>'+need+(need===1?" answer":" answers")+'</b> from you. <a href="#needs-you">Answer now</a></div>';
+  h+=dropBox();
   h+=runway();
   h+='<div class="tools"><input type="search" id="q" placeholder="Search programmes, funders, regions" value="'+esc(UI.q)+'" aria-label="Search">'+
     '<select id="f-project" aria-label="Project"><option value="all">All projects</option>'+S.projects.map(function(p){return '<option value="'+esc(p.id)+'"'+(UI.project===p.id?" selected":"")+">"+esc(p.name)+"</option>"}).join("")+"</select>"+
@@ -413,6 +434,7 @@ document.addEventListener("click",function(e){
   var el=e.target.closest("[data-act]");if(!el)return;var id=el.dataset.id,act=el.dataset.act;
   if(act==="signOut"){if(sb)sb.auth.signOut();return}
   if(act==="toggle"){UI.open[id]=!UI.open[id];render(true)}
+  else if(act==="dismissLink"){patch("inbox/"+id,{dismissed:true})}
   else if(act==="plan"){UI.plan[id]=!UI.plan[id];render(true)}
   else if(act==="askPlan"){patch("opportunities/"+id,{fitPlanRequested:true},"Plan requested")}
   else if(act==="switchProject"){patch("opportunities/"+id,{project:el.dataset.p,projectSetBy:"owner",fitPlanRequested:true},"Project switched")}
@@ -447,6 +469,14 @@ document.addEventListener("submit",function(e){
       else m.textContent="";},function(){var m=$("l-msg");if(m)m.textContent="Couldn't reach the server. Try again."});
     return;
   }
+  if(e.target.id==="linkForm"){
+    var raw=$("d-url").value.trim(),u=firstUrl(raw);
+    if(!u){toast("Paste a link that starts with http.");return}
+    if(S.inbox.some(function(i){return i.url===u&&!i.dismissed&&i.status==="queued"})){toast("That link is already waiting for the agent.");return}
+    var note=[$("d-note").value.trim(),raw.replace(u,"").trim()].filter(Boolean).join(" ").slice(0,1500);
+    setDoc("inbox/l-"+Date.now().toString(36),{url:u,note:note,status:"queued",addedAt:new Date().toISOString()},"Sent. The agent works on it at its next scan.");
+    return;
+  }
   if(e.target.id==="addForm"){
     var name=$("a-name").value.trim();if(!name)return;var id=slug(name),n=2;while(find(S.opps,id))id=slug(name)+"-"+(n++);
     var now=new Date().toISOString();
@@ -466,7 +496,7 @@ function status(msg){var s=$("status");s.hidden=!msg;s.textContent=msg||""}
 function setUser(u){
   var was=S.user&&S.user.id;S.authChecked=true;S.user=u||null;$("signOut").hidden=!S.user;
   if(S.user){if(was!==S.user.id){S.loaded=false;render(true);reload()}}
-  else{S.opps=[];S.projects=[];S.requests=[];S.runs=[];S.config=null;S.loaded=false;status("");render(true)}
+  else{S.opps=[];S.inbox=[];S.projects=[];S.requests=[];S.runs=[];S.config=null;S.loaded=false;status("");render(true)}
 }
 route();
 if(sb){
