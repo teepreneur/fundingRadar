@@ -107,6 +107,12 @@ textarea{width:100%;min-height:72px;resize:vertical;line-height:1.45}
 .side label,.form label{display:flex;flex-direction:column;gap:4px;font-size:13px;color:var(--ink2);font-weight:500}
 .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
 .links{display:flex;gap:14px;flex-wrap:wrap;margin-top:12px}
+.plan{margin-top:16px;padding-top:14px;border-top:1px dashed var(--line);display:flex;flex-direction:column;gap:10px;align-items:flex-start}
+.plan p{margin:0;overflow-wrap:anywhere}
+.plan ol{margin:0;padding-left:20px;display:flex;flex-direction:column;gap:10px}
+.plan li b{font-weight:600}
+.verdict{font:600 15px/1.3 var(--display);padding:6px 10px;border-radius:8px;background:var(--cs);color:var(--c)}
+.v-reachable{--c:var(--ok);--cs:var(--ok-soft)}.v-next_cycle{--c:var(--warm);--cs:var(--warm-soft)}.v-not_worth_it{--c:var(--hot);--cs:var(--hot-soft)}
 
 .form{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:16px;display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px}
 .form .full{grid-column:1/-1}
@@ -156,7 +162,7 @@ textarea{width:100%;min-height:72px;resize:vertical;line-height:1.45}
 (function(){
 "use strict";
 var S={opps:[],projects:[],requests:[],runs:[],config:null,user:null,authChecked:false,loaded:false};
-var UI={view:"pipeline",q:"",project:"all",win:"active",sort:"deadline",open:{},adding:false,deferred:false};
+var UI={view:"pipeline",q:"",project:"all",win:"active",sort:"deadline",open:{},plan:{},adding:false,deferred:false};
 var STAGES=[["new","New"],["shortlisted","Shortlisted"],["drafting","Drafting"],["draft_ready","Draft ready"],["submitted","Submitted"],["won","Won"],["not_selected","Not selected"],["skipped","Skipped"]];
 var KINDS=["Grant","Accelerator","Fellowship","Competition","Equity / VC","Incubator","Other"];
 var MON=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
@@ -265,6 +271,22 @@ function runway(){
   });
   return h+'</div><div class="track-pad"></div></section>';
 }
+var VERDICTS={reachable:"Reachable before this deadline",next_cycle:"Realistic for the next cycle, not this one",not_worth_it:"Not worth chasing with this project"};
+function planBlock(o){
+  var p=o.fitPlan,open=!!UI.plan[o.id],id=esc(o.id);
+  var h='<div class="plan"><button class="btn" data-act="plan" data-id="'+id+'" aria-expanded="'+open+'">'+(open?"Hide the plan":"How to make this a strong fit")+"</button>";
+  if(!open)return h+"</div>";
+  if(!p||!(p.steps&&p.steps.length||p.gap)){
+    return h+(o.fitPlanRequested?'<p class="meta">Requested. The agent writes the plan on its next scan.</p>':
+      '<p class="meta">The agent hasn\'t written a plan for this one yet.</p><button class="btn primary" data-act="askPlan" data-id="'+id+'">Ask for a plan</button>')+"</div>";
+  }
+  if(VERDICTS[p.verdict])h+='<p class="verdict v-'+esc(p.verdict)+'">'+VERDICTS[p.verdict]+"</p>";
+  if(p.gap)h+="<p><b>What's holding it back:</b> "+esc(p.gap)+"</p>";
+  if(p.steps&&p.steps.length)h+="<ol>"+p.steps.map(function(s){return "<li><b>"+esc(s.action)+"</b>"+(s.effort?' <span class="chip">'+esc(s.effort)+"</span>":"")+(s.why?'<br><span class="meta">'+esc(s.why)+"</span>":"")+"</li>"}).join("")+"</ol>";
+  if(p.betterProject&&p.betterProject!==o.project&&find(S.projects,p.betterProject))h+="<p><b>Stronger applicant:</b> "+esc(projName(p.betterProject))+". "+esc(p.betterProjectWhy)+'</p><button class="btn" data-act="switchProject" data-id="'+id+'" data-p="'+esc(p.betterProject)+'">Apply with '+esc(projName(p.betterProject))+" instead</button>";
+  if(p.writtenAt)h+='<p class="meta">Plan written '+esc(fmtDay(p.writtenAt))+(o.fitPlanRequested?" · an updated plan is requested":"")+"</p>";
+  return h+"</div>";
+}
 function oppRow(o){
   var open=!!UI.open[o.id],sub=[o.funder,o.amount,o.region].filter(Boolean).map(esc).join(" · ");
   var chips=(o.project?'<span class="chip proj">'+esc(projName(o.project))+"</span>":"")+
@@ -282,7 +304,7 @@ function oppRow(o){
     (o.fitWhy?"<dt>Why this project</dt><dd>"+esc(o.fitWhy)+"</dd>":"")+
     (bl?"<dt>Before applying</dt><dd><ul>"+bl+"</ul></dd>":"")+
     (o.foundAt?"<dt>Found</dt><dd>"+esc(fmtDay(o.foundAt))+(o.source?" · "+esc(o.source):"")+"</dd>":"")+
-    "</dl>"+(links?'<div class="links">'+links+"</div>":"")+"</div>"+
+    "</dl>"+(links?'<div class="links">'+links+"</div>":"")+(o.fit!=="strong"&&!isClosed(o)?planBlock(o):"")+"</div>"+
     '<div class="side"><label>Where you are<select data-change="stage" data-id="'+esc(o.id)+'" id="st-'+esc(o.id)+'">'+
     STAGES.map(function(s){return '<option value="'+s[0]+'"'+((o.stage||"new")===s[0]?" selected":"")+">"+s[1]+"</option>"}).join("")+"</select></label>"+
     '<label>Apply with<select data-change="project" data-id="'+esc(o.id)+'" id="pj-'+esc(o.id)+'"><option value="">Not decided</option>'+
@@ -391,6 +413,9 @@ document.addEventListener("click",function(e){
   var el=e.target.closest("[data-act]");if(!el)return;var id=el.dataset.id,act=el.dataset.act;
   if(act==="signOut"){if(sb)sb.auth.signOut();return}
   if(act==="toggle"){UI.open[id]=!UI.open[id];render(true)}
+  else if(act==="plan"){UI.plan[id]=!UI.plan[id];render(true)}
+  else if(act==="askPlan"){patch("opportunities/"+id,{fitPlanRequested:true},"Plan requested")}
+  else if(act==="switchProject"){patch("opportunities/"+id,{project:el.dataset.p,projectSetBy:"owner",fitPlanRequested:true},"Project switched")}
   else if(act==="jump"){UI.open[id]=true;UI.win=UI.win==="active"||UI.win==="all"?UI.win:"active";render(true);var n=$("o-"+id);if(n)n.scrollIntoView({block:"center",behavior:"smooth"})}
   else if(act==="addToggle"){UI.adding=!UI.adding;render(true)}
   else if(act==="saveNotes"){patch("opportunities/"+id,{notes:$("nt-"+id).value.trim()},"Notes saved")}
