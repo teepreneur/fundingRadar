@@ -444,7 +444,10 @@ function render(force){
   if(!force&&a&&$("view").contains(a)&&(a.tagName==="TEXTAREA"||(a.tagName==="INPUT"&&a.type!=="search"))){UI.deferred=true;return}
   UI.deferred=false;
   var keepQ=a&&a.id==="q",pos=keepQ?a.selectionStart:0;
+  /* a background refresh must never wipe something half-typed */
+  var drafts={};if(!force)$("view").querySelectorAll("textarea[id],input[id]").forEach(function(n){if(n.type!=="checkbox"&&n.type!=="radio")drafts[n.id]=n.value});
   $("view").innerHTML=!S.user?viewLogin():!S.loaded?'<div class="empty">Loading your pipeline…</div>':UI.view==="needs-you"?viewNeeds():UI.view==="projects"?viewProjects():UI.view==="agent"?viewAgent():viewPipeline();
+  Object.keys(drafts).forEach(function(k){var n=$(k);if(n&&n.value!==drafts[k])n.value=drafts[k]});
   if(keepQ&&$("q")){$("q").focus();try{$("q").setSelectionRange(pos,pos)}catch(e){}}
   var need=S.requests.filter(function(r){return r.status==="open"}).length,b=$("needBadge");b.hidden=!need;b.textContent=need;
   document.querySelectorAll(".tab").forEach(function(t){if(t.dataset.tab===UI.view)t.setAttribute("aria-current","page");else t.removeAttribute("aria-current")});
@@ -480,7 +483,11 @@ document.addEventListener("change",function(e){
   else if(t.id==="f-sort"){UI.sort=t.value;render(true)}
 });
 document.addEventListener("input",function(e){if(e.target.id==="q"){UI.q=e.target.value;render(true)}});
-document.addEventListener("focusout",function(){setTimeout(function(){if(UI.deferred)render()},0)});
+/* Leaving a box by pressing a button must let that press land before the screen is redrawn. */
+function lateRender(){clearTimeout(lateRender.t);lateRender.t=setTimeout(function(){if(!UI.deferred)return;if(UI.down){lateRender();return}render()},400)}
+document.addEventListener("pointerdown",function(){UI.down=true},true);
+["pointerup","pointercancel"].forEach(function(ev){document.addEventListener(ev,function(){setTimeout(function(){UI.down=false},60)},true)});
+document.addEventListener("focusout",lateRender);
 document.addEventListener("submit",function(e){
   e.preventDefault();
   if(e.target.id==="loginForm"){
@@ -499,7 +506,8 @@ document.addEventListener("submit",function(e){
     if(S.inbox.some(function(i){return i.url===u&&!i.dismissed&&i.status==="queued"})){toast("That link is already waiting for the agent.");return}
     var note=[$("d-note").value.trim(),raw.replace(u,"").trim()].filter(Boolean).join(" ").slice(0,1500);
     var linkId="l-"+Date.now().toString(36);
-    setDoc("inbox/"+linkId,{url:u,note:note,status:"queued",addedAt:new Date().toISOString()}).then(function(ok){if(ok)kick(linkId)});
+    $("d-url").value="";$("d-note").value="";
+    setDoc("inbox/"+linkId,{url:u,note:note,status:"queued",addedAt:new Date().toISOString()}).then(function(ok){if(ok)kick(linkId);else if($("d-url")&&!$("d-url").value){$("d-url").value=u;$("d-note").value=note}});
     return;
   }
   if(e.target.id==="addForm"){
@@ -509,7 +517,7 @@ document.addEventListener("submit",function(e){
       estimated:false,kind:$("a-kind").value,project:$("a-project").value,url:url($("a-url").value),window:"open",stage:"shortlisted",source:"Added by you",foundAt:now},"Added to pipeline")
       .then(function(ok){if(ok){UI.adding=false;UI.open[id]=true;render(true)}});
   }else if(e.target.id==="srcForm"){
-    var v=$("s-new").value.trim();if(!v)return;var src=((S.config||{}).sources||[]).concat([v]);
+    var v=$("s-new").value.trim();if(!v)return;var src=((S.config||{}).sources||[]).concat([v]);$("s-new").value="";
     setDoc("config/agent",Object.assign({},S.config||{},{sources:src}),"Source added");
     $("s-new").value="";
   }
