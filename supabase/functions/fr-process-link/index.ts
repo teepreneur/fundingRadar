@@ -7,6 +7,7 @@ const KINDS = ["Grant", "Accelerator", "Fellowship", "Competition", "Equity / VC
 const WINDOWS = ["open", "upcoming", "closed"];
 const FITS = ["strong", "possible", "weak"];
 const VERDICTS = ["reachable", "next_cycle", "not_worth_it"];
+const US_EFFECTS = ["required", "helps", "local_only", "no_difference"];
 // Bounds the cost of one link: no single page can add more than this many tokens.
 const PAGE_TOKEN_CAP = 12000;
 const FALLBACK_NOTE ="Instant processing didn't finish, so this waits for the next scan.";
@@ -53,6 +54,7 @@ How to work:
 - Check the list of opportunities already in his pipeline. If this programme and cycle is already there, record outcome "duplicate" with its id.
 - Choose the one project of his with the best chance of winning it, judged on eligibility (geography, stage, legal status, sector) and how well its real evidence answers the funder's criteria. If his note names a project, use that project and set project_named_by_user true. Be honest about fit: a weak fit is recorded as weak, and it is still added because he asked for it.
 - When the fit is not strong, write a fit_plan: the specific gap tied to the funder's stated criteria, up to five concrete steps he can take (each a real change to the project or real evidence to gather, with an honest time estimate and the criterion it satisfies), and a verdict: "reachable" before this deadline, "next_cycle", or "not_worth_it" when a hard rule cannot be met. Name a better_project only when another of his projects is clearly a stronger applicant. Never suggest overstating traction or describing a project as something it is not.
+- He is considering registering a company in the US as well as in Ghana. From the funder's own eligibility rules, record us_entity: effect "required" (only a US-registered company can apply or be funded), "helps" (not required, but the funder says it prefers or invests through a US entity), "local_only" (the applicant must be registered or based in a specific non-US place, so a US company alone would not qualify), or "no_difference"; with one or two plain sentences on the actual rule. Leave us_entity out when the official rules do not settle it. Never guess.
 - Record outcome "rejected" when the programme is closed with no future cycle or the link is not a funding opportunity. Record "needs_info" when you cannot tell which programme the link is about.
 - The result field is one plain sentence he will read on the dashboard: what you added and when it closes, or exactly why you did not add it and what he should paste to help (for example the post's caption or the programme's name).
 
@@ -89,6 +91,15 @@ const RECORD_TOOL = {
           fit: { type: "string", enum: FITS },
           fit_why: { type: "string", description: "One sentence." },
           blockers: { type: "array", items: { type: "string" }, description: "Eligibility gaps and missing inputs, short." },
+          us_entity: {
+            type: "object",
+            description: "What registering a company in the US would change for this programme, from the funder's own rules. Omit when the rules do not settle it.",
+            properties: {
+              effect: { type: "string", enum: US_EFFECTS },
+              why: { type: "string", description: "One or two plain sentences stating the rule." },
+            },
+            required: ["effect", "why"],
+          },
           fit_plan: {
             type: "object",
             description: "Required when fit is not strong.",
@@ -214,6 +225,10 @@ async function processLink(db: SupabaseClient, id: string, item: Doc): Promise<v
       if (estimated && text(o.deadline_basis, 240)) doc.deadlineBasis = text(o.deadline_basis, 240);
       if (deadline && !estimated) doc.verifiedAt = today;
       if (project && o.project_named_by_user === true) doc.projectSetBy = "owner";
+      const us = o.us_entity as Doc | undefined;
+      if (us && typeof us === "object" && US_EFFECTS.includes(String(us.effect))) {
+        doc.usEntity = { effect: String(us.effect), why: text(us.why, 400), checkedAt: today };
+      }
       const plan = o.fit_plan as Doc | undefined;
       if (fit !== "strong" && plan && typeof plan === "object") {
         const better = text(plan.better_project, 120);

@@ -98,6 +98,7 @@ textarea{width:100%;min-height:72px;resize:vertical;line-height:1.45}
 .chip.proj{background:var(--accent-soft);color:var(--accent)}
 .chip.strong{background:var(--ok-soft);color:var(--ok)}
 .chip.weak{background:var(--hot-soft);color:var(--hot)}
+.chip.us{background:var(--warm-soft);color:var(--warm)}
 .opp-body{border-top:1px solid var(--line);padding:16px;display:grid;grid-template-columns:minmax(0,1.4fr) minmax(0,1fr);gap:20px}
 .kv{display:grid;grid-template-columns:110px minmax(0,1fr);gap:6px 12px;margin:0}
 .kv dt{color:var(--ink2);font-size:13px;padding-top:1px}
@@ -250,6 +251,8 @@ function filtered(){
     if(UI.win==="open"&&(o.window!=="open"||!isLive(o)))return false;
     if(UI.win==="drafts"&&o.stage!=="draft_ready"&&o.stage!=="drafting")return false;
     if(UI.win==="submitted"&&o.stage!=="submitted"&&o.stage!=="won")return false;
+    if(UI.win==="us"&&(!isLive(o)||!o.usEntity||(o.usEntity.effect!=="required"&&o.usEntity.effect!=="helps")))return false;
+    if(UI.win==="local"&&(!isLive(o)||!o.usEntity||o.usEntity.effect!=="local_only"))return false;
     if(q&&[o.name,o.funder,o.region,o.amount,o.kind,projName(o.project)].join(" ").toLowerCase().indexOf(q)<0)return false;
     return true;
   }).sort(function(a,b){
@@ -292,10 +295,16 @@ function planBlock(o){
   if(p.writtenAt)h+='<p class="meta">Plan written '+esc(fmtDay(p.writtenAt))+(o.fitPlanRequested?" · an updated plan is requested":"")+"</p>";
   return h+"</div>";
 }
+/* Would registering a company in the US change anything for this one? Written by the agent from the funder's own rules. */
+var US_FX={required:["US company required","Only a US-registered company can apply."],helps:["US company helps","Not required, but a US-registered company improves your position."],
+  local_only:["Local company required","The applicant must be registered locally. A US company on its own would not qualify."],no_difference:["","Where the company is registered makes no difference here."]};
+function usLine(o){var u=o.usEntity;if(!u||!US_FX[u.effect])return "";
+  return "<dt>US registration</dt><dd><b>"+esc(US_FX[u.effect][1])+"</b>"+(u.why?" "+esc(u.why):"")+(u.checkedAt?' <span class="meta">Checked '+esc(fmtDay(u.checkedAt))+".</span>":"")+"</dd>"}
 function oppRow(o){
   var open=!!UI.open[o.id],sub=[o.funder,o.amount,o.region].filter(Boolean).map(esc).join(" · ");
   var chips=(o.project?'<span class="chip proj">'+esc(projName(o.project))+"</span>":"")+
     (o.fit?'<span class="chip '+esc(o.fit)+'">'+(o.fit==="strong"?"Strong fit":o.fit==="weak"?"Weak fit":"Possible fit")+"</span>":"")+
+    (o.usEntity&&US_FX[o.usEntity.effect]&&US_FX[o.usEntity.effect][0]?'<span class="chip us">'+US_FX[o.usEntity.effect][0]+"</span>":"")+
     '<span class="chip">'+esc(stageLabel(o.stage))+"</span>";
   var h='<article class="opp" id="o-'+esc(o.id)+'"><button class="opp-head" data-act="toggle" data-id="'+esc(o.id)+'" aria-expanded="'+open+'">'+
     countBlock(o)+'<span><span class="name">'+esc(o.name)+'</span><span class="sub">'+sub+'</span></span><span class="chips">'+chips+"</span></button>";
@@ -307,6 +316,7 @@ function oppRow(o){
     (o.kind?"<dt>Type</dt><dd>"+esc(o.kind)+(o.equityFree?" · equity-free":"")+"</dd>":"")+
     (o.summary?"<dt>What it is</dt><dd>"+esc(o.summary)+"</dd>":"")+
     (o.fitWhy?"<dt>Why this project</dt><dd>"+esc(o.fitWhy)+"</dd>":"")+
+    usLine(o)+
     (bl?"<dt>Before applying</dt><dd><ul>"+bl+"</ul></dd>":"")+
     (o.foundAt?"<dt>Found</dt><dd>"+esc(fmtDay(o.foundAt))+(o.source?" · "+esc(o.source):"")+"</dd>":"")+
     "</dl>"+(links?'<div class="links">'+links+"</div>":"")+(o.fit!=="strong"&&!isClosed(o)?planBlock(o):"")+"</div>"+
@@ -374,10 +384,13 @@ function viewPipeline(){
     "</b> due within 30 days</span><span><b>"+drafts+"</b> drafts ready</span><span>"+(last?"Last scan "+esc(fmtWhen(last.at)):"No scan has run yet")+"</span></div></div>";
   if(need)h+='<div class="note need">The agent is waiting on <b>'+need+(need===1?" answer":" answers")+'</b> from you. <a href="#needs-you">Answer now</a></div>';
   h+=dropBox();
+  var usN={required:0,helps:0,local_only:0,no_difference:0},usAny=0;live.forEach(function(o){if(o.usEntity&&usN[o.usEntity.effect]!==undefined){usN[o.usEntity.effect]++;usAny++}});
+  if(usAny)h+='<div class="facts"><span>Registering in the US:</span><span><b>'+usN.required+'</b> require it</span><span><b>'+usN.helps+'</b> helped by it</span><span><b>'+usN.local_only+
+    '</b> need a local company instead</span><span><b>'+usN.no_difference+'</b> unaffected</span>'+(live.length>usAny?"<span>"+(live.length-usAny)+" not checked yet</span>":"")+"</div>";
   h+=runway();
   h+='<div class="tools"><input type="search" id="q" placeholder="Search programmes, funders, regions" value="'+esc(UI.q)+'" aria-label="Search">'+
     '<select id="f-project" aria-label="Project"><option value="all">All projects</option>'+S.projects.map(function(p){return '<option value="'+esc(p.id)+'"'+(UI.project===p.id?" selected":"")+">"+esc(p.name)+"</option>"}).join("")+"</select>"+
-    '<select id="f-win" aria-label="Show">'+[["active","Active"],["open","Open now"],["drafts","Drafts"],["submitted","Submitted"],["all","Everything"]].map(function(w){return '<option value="'+w[0]+'"'+(UI.win===w[0]?" selected":"")+">"+w[1]+"</option>"}).join("")+"</select>"+
+    '<select id="f-win" aria-label="Show">'+[["active","Active"],["open","Open now"],["drafts","Drafts"],["submitted","Submitted"],["us","A US company matters"],["local","Local company required"],["all","Everything"]].map(function(w){return '<option value="'+w[0]+'"'+(UI.win===w[0]?" selected":"")+">"+w[1]+"</option>"}).join("")+"</select>"+
     '<select id="f-sort" aria-label="Sort"><option value="deadline"'+(UI.sort==="deadline"?" selected":"")+'>Soonest deadline</option><option value="fit"'+(UI.sort==="fit"?" selected":"")+">Best fit</option></select>"+
     '<button class="btn" data-act="addToggle">'+(UI.adding?"Close":"Add one yourself")+"</button></div>";
   if(UI.adding)h+=addForm();
