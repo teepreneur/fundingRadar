@@ -323,7 +323,7 @@ function oppRow(o){
     '<div class="side"><label>Where you are<select data-change="stage" data-id="'+esc(o.id)+'" id="st-'+esc(o.id)+'">'+
     STAGES.map(function(s){return '<option value="'+s[0]+'"'+((o.stage||"new")===s[0]?" selected":"")+">"+s[1]+"</option>"}).join("")+"</select></label>"+
     '<label>Apply with<select data-change="project" data-id="'+esc(o.id)+'" id="pj-'+esc(o.id)+'"><option value="">Not decided</option>'+
-    S.projects.map(function(p){return '<option value="'+esc(p.id)+'"'+(o.project===p.id?" selected":"")+">"+esc(p.name)+"</option>"}).join("")+"</select></label>"+
+    S.projects.filter(function(p){return !p.applyAs||o.project===p.id}).map(function(p){return '<option value="'+esc(p.id)+'"'+(o.project===p.id?" selected":"")+">"+esc(p.name)+"</option>"}).join("")+"</select></label>"+
     '<label>Your notes<textarea id="nt-'+esc(o.id)+'" placeholder="Anything the agent should know about this one">'+esc(o.notes)+"</textarea></label>"+
     '<div class="row"><button class="btn primary" data-act="saveNotes" data-id="'+esc(o.id)+'">Save notes</button>'+
     (o.stage==="skipped"?"":'<button class="btn quiet" data-act="skip" data-id="'+esc(o.id)+'">Not for me</button>')+"</div></div></div>";
@@ -333,7 +333,7 @@ function addForm(){
   return '<form class="form" id="addForm"><label class="full">Programme name<input type="text" id="a-name" required maxlength="140"></label>'+
     '<label>Funder<input type="text" id="a-funder" maxlength="120"></label><label>Amount or prize<input type="text" id="a-amount" maxlength="80" placeholder="e.g. Up to $50K"></label>'+
     '<label>Deadline<input type="date" id="a-deadline"></label><label>Type<select id="a-kind">'+KINDS.map(function(k){return "<option>"+k+"</option>"}).join("")+"</select></label>"+
-    '<label>Apply with<select id="a-project"><option value="">Let the agent decide</option>'+S.projects.map(function(p){return '<option value="'+esc(p.id)+'">'+esc(p.name)+"</option>"}).join("")+"</select></label>"+
+    '<label>Apply with<select id="a-project"><option value="">Let the agent decide</option>'+S.projects.filter(function(p){return !p.applyAs}).map(function(p){return '<option value="'+esc(p.id)+'">'+esc(p.name)+"</option>"}).join("")+"</select></label>"+
     '<label class="full">Link<input type="url" id="a-url" placeholder="https://"></label>'+
     '<div class="row full"><button class="btn primary" type="submit">Add to pipeline</button><button class="btn quiet" type="button" data-act="addToggle">Cancel</button></div></form>';
 }
